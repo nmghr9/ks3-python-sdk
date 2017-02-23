@@ -1,3 +1,6 @@
+**对金山云 SDK 中 bucket 的 list 进行了处理，其中解析的部分依赖 PyQuery 库，其他使用方法与原版完全相同。**
+
+---
 #KS3 SDK for python使用指南
 ---
 

@@ -1,7 +1,8 @@
-
-import six
 import urllib
 import xml
+
+import six
+from pyquery import PyQuery
 
 import ks3.utils
 from ks3 import handler
@@ -9,14 +10,14 @@ from ks3.acl import Policy, CannedACLStrings
 from ks3.bucketlistresultset import BucketListResultSet
 from ks3.bucketlistresultset import MultiPartUploadListResultSet
 from ks3.bucketlogging import BucketLogging
-from ks3.exception import S3ResponseError, S3CreateError
+from ks3.exception import S3ResponseError
 from ks3.key import Key
 from ks3.multipart import MultiPartUpload, CompleteMultiPartUpload
 from ks3.prefix import Prefix
 from ks3.resultset import ResultSet
 
-class Bucket(object):
 
+class Bucket(object):
     def __init__(self, connection=None, name=None):
         self.connection = connection
         self.name = name
@@ -41,10 +42,10 @@ class Bucket(object):
         else:
             setattr(self, name, value)
 
-    def new_key(self, key_name=None):       
+    def new_key(self, key_name=None):
         """
-        Creates a new key 
-        
+        Creates a new key
+
         :type key_name: string
         :param key_name: The name of the key to create
 
@@ -52,7 +53,7 @@ class Bucket(object):
         :returns: An instance of the newly created key object
         """
         if not key_name:
-            raise ValueError('Empty key names are not allowed')                                                  
+            raise ValueError('Empty key names are not allowed')
         return Key(self, key_name)
 
     def generate_url(self, expires_in, method='GET', headers=None,
@@ -61,7 +62,7 @@ class Bucket(object):
         return self.connection.generate_url(expires_in, method, self.name,
                                             headers=headers,
                                             force_http=force_http,
-                                            response_headers=response_headers,                                   
+                                            response_headers=response_headers,
                                             expires_in_absolute=expires_in_absolute)
 
     def delete_keys(self, keys, quiet=False, mfa_token=None, headers=None):
@@ -99,9 +100,9 @@ class Bucket(object):
                 else:
                     if isinstance(key, Prefix):
                         key_name = key.name
-                        code = 'PrefixSkipped'   # Don't delete Prefix
+                        code = 'PrefixSkipped'  # Don't delete Prefix
                     else:
-                        key_name = repr(key)   # try get a string
+                        key_name = repr(key)  # try get a string
                         code = 'InvalidArgument'  # other unknown type
                     message = 'Invalid. No delete action taken for this object.'
                     error = Error(key_name, code=code, message=message)
@@ -137,6 +138,7 @@ class Bucket(object):
                 raise provider.storage_response_error(response.status,
                                                       response.reason,
                                                       body)
+
         while delete_keys2(headers):
             pass
         return result
@@ -146,7 +148,7 @@ class Bucket(object):
         """
         Check to see if a particular key exists within the bucket.
         """
-        #if validate is False:
+        # if validate is False:
         #    if headers or version_id or response_headers:
         #        raise BotoClientError(
         #            "When providing 'validate=False', no other params " + \
@@ -177,8 +179,8 @@ class Bucket(object):
         # support Range gets, which return status 206:
         if response.status / 100 == 2:
             k = Key(self)
-            #provider = self.connection.provider
-            #k.metadata = boto.utils.get_aws_metadata(response.msg, provider)
+            # provider = self.connection.provider
+            # k.metadata = boto.utils.get_aws_metadata(response.msg, provider)
             for field in Key.base_fields:
                 k.__dict__[field.lower().replace('-', '_')] = \
                     response.getheader(field)
@@ -231,7 +233,19 @@ class Bucket(object):
             h = handler.XmlHandler(rs, self)
             if not isinstance(body, bytes):
                 body = body.encode('utf-8')
-            xml.sax.parseString(body, h)
+            try:
+                xml.sax.parseString(body, h)
+            except Exception as exc:
+                print "There have exception {0}, use alternative method".format(str(exc))
+                doc = PyQuery(body)
+                for content in doc('Contents').items():
+                    new_key = Key(bucket=self)
+                    new_key.name = content('Key').text()
+                    new_key.etag = content('Etag').text()
+                    new_key.size = content('Size').text()
+                    new_key.last_modified = content('LastModified').text()
+                    new_key.storage_class = content('StorageClass').text()
+                    rs.append(new_key)
             return rs
         else:
             raise S3ResponseError(response.status, response.reason, body)
@@ -245,7 +259,7 @@ class Bucket(object):
         for key, value in sorted(params.items(), key=lambda x: x[0]):
             if value is None:
                 continue
-            key = key.replace('_', '-') 
+            key = key.replace('_', '-')
             if key == 'maxkeys':
                 key = 'max-keys'
             if not isinstance(value, six.string_types + (six.binary_type,)):
@@ -282,7 +296,6 @@ class Bucket(object):
             self.set_canned_acl(acl_or_str, key_name,
                                 headers, version_id)
 
-
     def set_canned_acl(self, acl_str, key_name='', headers=None,
                        version_id=None):
         assert acl_str in CannedACLStrings
@@ -296,7 +309,7 @@ class Bucket(object):
         if version_id:
             query_args += '&versionId=%s' % version_id
         response = self.connection.make_request('PUT', self.name, key_name,
-                headers=headers, query_args=query_args)
+                                                headers=headers, query_args=query_args)
         body = response.read()
         if response.status != 200:
             raise S3ResponseError(response.status, response.reason, body)
@@ -318,7 +331,6 @@ class Bucket(object):
             return policy
         else:
             raise S3ResponseError(response.status, response.reason, body)
-
 
     def enable_logging(self, target_bucket, target_prefix='',
                        grants=None, headers=None):
@@ -362,7 +374,7 @@ class Bucket(object):
         if not isinstance(body, bytes):
             body = body.encode('utf-8')
         response = self.connection.make_request('PUT', self.name, data=body,
-                query_args='logging', headers=headers)
+                                                query_args='logging', headers=headers)
         body = response.read()
         if response.status == 200:
             return True
@@ -387,7 +399,7 @@ class Bucket(object):
         :return: A BucketLogging object for this bucket.
         """
         response = self.connection.make_request('GET', self.name,
-                query_args='logging', headers=headers)
+                                                query_args='logging', headers=headers)
         body = response.read()
         if response.status == 200:
             blogging = BucketLogging()
@@ -476,7 +488,7 @@ class Bucket(object):
         A lower-level, version-aware method for listing active
         MultiPart uploads for a bucket.
         """
-        #self.validate_kwarg_names(params, ['max_uploads', 'key_marker',
+        # self.validate_kwarg_names(params, ['max_uploads', 'key_marker',
         #                                   'upload_id_marker', 'encoding_type',
         #                                   'delimiter', 'prefix'])
         return self._get_all([('Upload', MultiPartUpload),
@@ -505,14 +517,14 @@ class Bucket(object):
             storage_class_header = provider.storage_class_header
             if storage_class_header:
                 headers[storage_class_header] = 'REDUCED_REDUNDANCY'
-            # TODO: what if the provider doesn't support reduced redundancy?
+                # TODO: what if the provider doesn't support reduced redundancy?
         if encrypt_key:
             headers[provider.server_side_encryption_header] = 'AES256'
         if metadata is None:
             metadata = {}
 
         headers = ks3.utils.merge_meta(headers, metadata,
-                self.connection.provider)
+                                       self.connection.provider)
         response = self.connection.make_request('POST', self.name, key_name,
                                                 query_args=query_args,
                                                 headers=headers)

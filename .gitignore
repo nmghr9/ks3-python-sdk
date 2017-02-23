@@ -3,3 +3,4 @@ build/*
 dist/*
 ks3sdk.egg-info/*
 .venv/*
+.idea/
